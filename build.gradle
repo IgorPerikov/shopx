@@ -1,0 +1,19 @@
+group 'com.github.igorperikov.shopx'
+version '0.1'
+
+apply plugin: 'java'
+
+sourceCompatibility = 1.8
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+ext {
+    vertxVersion = '3.4.2'
+}
+
+dependencies {
+    compile "io.vertx:vertx-core:${vertxVersion}"
+}
