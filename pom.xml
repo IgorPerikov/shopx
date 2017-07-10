@@ -10,6 +10,8 @@
         <module>userdata-service</module>
         <module>facade-service</module>
         <module>recommendation-service</module>
+        <module>billing-service</module>
+        <module>social-service</module>
     </modules>
 
     <properties>

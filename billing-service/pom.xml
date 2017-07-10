@@ -9,7 +9,7 @@
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>userdata-service</artifactId>
+    <artifactId>billing-service</artifactId>
 
     <properties>
         <vertx.verticle></vertx.verticle>
