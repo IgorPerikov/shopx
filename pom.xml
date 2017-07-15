@@ -25,6 +25,9 @@
         <vertx.version>3.4.2</vertx.version>
 
         <fabric8-vertx-maven-plugin.version>1.0.8</fabric8-vertx-maven-plugin.version>
+        <mysql-connector-java.version>5.1.42</mysql-connector-java.version>
+        <HikariCP.version>2.6.2</HikariCP.version>
+        <logback-core.version>1.2.3</logback-core.version>
     </properties>
 
     <dependencyManagement>
