@@ -12,6 +12,7 @@
         <module>recommendation-service</module>
         <module>billing-service</module>
         <module>social-service</module>
+        <module>common</module>
     </modules>
 
     <properties>
