@@ -31,9 +31,12 @@ public class ProductVerticle extends AbstractVerticle {
     }
 
     private Future<Void> startWebServer() {
+        Router router = Router.router(vertx);
+        router.get("/ping").handler(this::ping);
+
         return Future.future(event -> {
             vertx.createHttpServer()
-                    .requestHandler(event1 -> Router.router(vertx).get("/ping").handler(this::ping))
+                    .requestHandler(router::accept)
                     .rxListen(PORT)
                     .subscribe(
                             httpServer -> event.complete(),
