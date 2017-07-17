@@ -55,12 +55,11 @@ public class ProductVerticle extends AbstractVerticle {
     }
 
     private void returnProducts(RoutingContext rc) {
-        // TODO: move to rx?
-        Integer page = ParamParser.getIntValue(rc, "page", "1");
-        Integer rowCount = ParamParser.getIntValue(rc, "per_page", "10");
-        Integer rowOffset = rowCount * (page - 1);
         dbClient.rxGetConnection()
                 .flatMap(sqlConnection -> {
+                    Integer page = ParamParser.getIntValue(rc, "page", "1");
+                    Integer rowCount = ParamParser.getIntValue(rc, "per_page", "10");
+                    Integer rowOffset = rowCount * (page - 1);
                     return sqlConnection.rxQueryWithParams(
                             SQL_GET_PAGE_OF_PRODUCTS,
                             new JsonArray().add(rowOffset).add(rowCount)
