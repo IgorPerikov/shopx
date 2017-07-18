@@ -5,18 +5,18 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
-import io.vertx.ext.sql.ResultSet;
 import io.vertx.rxjava.core.AbstractVerticle;
+import io.vertx.rxjava.core.RxHelper;
 import io.vertx.rxjava.ext.jdbc.JDBCClient;
 import io.vertx.rxjava.ext.web.Router;
 import io.vertx.rxjava.ext.web.RoutingContext;
-import rx.Single;
 
 
 public class ProductVerticle extends AbstractVerticle {
     private static final Logger log = LoggerFactory.getLogger(ProductVerticle.class);
     private static final Integer PORT = 8080;
     private static final String SQL_GET_PAGE_OF_PRODUCTS = "SELECT * FROM products limit ?,?";
+    private static final String SQL_INSERT_NEW_PRODUCT = "INSERT INTO products (name) values (?)";
 
     private JDBCClient dbClient;
 
@@ -76,7 +76,15 @@ public class ProductVerticle extends AbstractVerticle {
     }
 
     private void createProduct(RoutingContext rc) {
-        rc.response().end(new JsonObject().put("function", "save new").encodePrettily());
+        // TODO: should it be executed under RxHelper.scheduler(vertx)?
+        rc.request().toObservable().lift(RxHelper.unmarshaller(Product.class)).subscribe(product -> {
+            dbClient.rxGetConnection()
+                    .flatMap(conn -> {
+                        return conn.rxUpdateWithParams(SQL_INSERT_NEW_PRODUCT, new JsonArray().add(product.name))
+                                .doAfterTerminate(conn::close);
+                    })
+                    .subscribe(r -> rc.response().setStatusCode(201).end());
+        });
     }
 
     private Future<Void> obtainDatabaseConnection() {
@@ -90,16 +98,8 @@ public class ProductVerticle extends AbstractVerticle {
                     .put("maximumPoolSize", 64));
 
             dbClient.rxGetConnection()
-                    .flatMap(
-                            sqlConnection -> {
-                                Single<ResultSet> querySingle = sqlConnection.rxQuery("select * from products limit 1");
-                                return querySingle.doAfterTerminate(sqlConnection::close);
-                            }
-                    )
-                    .subscribe(
-                            resultSet -> event.complete(),
-                            event::fail
-                    );
+                    .flatMap(conn -> conn.rxQuery("select * from products limit 1").doAfterTerminate(conn::close))
+                    .subscribe(resultSet -> event.complete(), event::fail);
         });
     }
 }
