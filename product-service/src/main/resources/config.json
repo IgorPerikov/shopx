@@ -6,5 +6,8 @@
     "password" : "root",
     "connectionTimeout" : 1000,
     "maximumPoolSize" : 64
+  },
+  "server" : {
+    "port" : 8080
   }
 }

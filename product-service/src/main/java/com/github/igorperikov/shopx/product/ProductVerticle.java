@@ -18,9 +18,10 @@ import io.vertx.rxjava.ext.web.RoutingContext;
 
 public class ProductVerticle extends AbstractVerticle {
     private static final Logger log = LoggerFactory.getLogger(ProductVerticle.class);
-    private static final Integer PORT = 8080;
+
     private static final String SQL_GET_PAGE_OF_PRODUCTS = "SELECT * FROM products LIMIT ?,?";
     private static final String SQL_INSERT_NEW_PRODUCT = "INSERT INTO products (name) VALUES (?)";
+    private static final String SQL_GET_PRODUCT_BY_ID = "SELECT * FROM products WHERE id = ?";
     private static final String SQL_CHECK_CONNECTION = "SELECT * FROM products LIMIT 1";
 
     private JDBCClient dbClient;
@@ -28,17 +29,16 @@ public class ProductVerticle extends AbstractVerticle {
 
     @Override
     public void start(Future<Void> startFuture) throws Exception {
-        Future<Void> setup = initConfigRetriever()
+        initConfigRetriever()
                 .compose(event -> obtainDatabaseConnection())
-                .compose(event -> startWebServer());
-        setup.setHandler(ar -> {
-            if (ar.failed()) {
-                startFuture.fail(ar.cause());
-            } else {
-                log.info("Server listening on port " + PORT);
-                startFuture.complete();
-            }
-        });
+                .compose(event -> startWebServer())
+                .setHandler(ar -> {
+                    if (ar.failed()) {
+                        startFuture.fail(ar.cause());
+                    } else {
+                        startFuture.complete();
+                    }
+                });
     }
 
     @Override
@@ -66,15 +66,21 @@ public class ProductVerticle extends AbstractVerticle {
 
     private Future<Void> startWebServer() {
         Router router = Router.router(vertx);
-        router.get("/products").handler(this::returnProducts);
+        router.get("/products/:id").handler(this::getProduct);
+        router.get("/products").handler(this::getProducts);
         router.post("/products").handler(this::createProduct);
 
         return Future.future(event -> {
+            // todo: move to non-cached config?
+            Integer port = configRetriever.getCachedConfig().getJsonObject("server").getInteger("port");
             vertx.createHttpServer()
                     .requestHandler(router::accept)
-                    .rxListen(PORT)
+                    .rxListen(port)
                     .subscribe(
-                            httpServer -> event.complete(),
+                            httpServer -> {
+                                log.info("Server listening on port " + port);
+                                event.complete();
+                            },
                             event::fail
                     );
         });
@@ -102,7 +108,34 @@ public class ProductVerticle extends AbstractVerticle {
         });
     }
 
-    private void returnProducts(RoutingContext rc) {
+    private void getProduct(RoutingContext rc) {
+        dbClient.rxGetConnection()
+                .flatMap(sqlConnection -> {
+                    String id = rc.pathParam("id");
+                    return sqlConnection.rxQueryWithParams(
+                            SQL_GET_PRODUCT_BY_ID,
+                            new JsonArray().add(id)
+                    ).doAfterTerminate(sqlConnection::close);
+                })
+                .subscribe(
+                        resultSet -> {
+                            resultSet.getRows();
+                            if (resultSet.getNumRows() == 0) {
+                                rc.response()
+                                        .putHeader("Content-type", "application/json")
+                                        .setStatusCode(404)
+                                        .end();
+                            } else {
+                                rc.response()
+                                        .putHeader("Content-type", "application/json")
+                                        .end(resultSet.getRows().get(0).encodePrettily());
+                            }
+                        },
+                        rc::fail
+                );
+    }
+
+    private void getProducts(RoutingContext rc) {
         dbClient.rxGetConnection()
                 .flatMap(sqlConnection -> {
                     Integer page = ParamParser.getIntValue(rc, "page", "1");
@@ -131,6 +164,7 @@ public class ProductVerticle extends AbstractVerticle {
                         return conn.rxUpdateWithParams(SQL_INSERT_NEW_PRODUCT, new JsonArray().add(product.name))
                                 .doAfterTerminate(conn::close);
                     })
+                    // todo: add location header
                     .subscribe(r -> rc.response().setStatusCode(201).end());
         });
     }
