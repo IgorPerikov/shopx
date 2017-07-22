@@ -2,11 +2,14 @@ package com.github.igorperikov.shopx.product;
 
 import com.github.igorperikov.shopx.common.entities.Product;
 import com.github.igorperikov.shopx.common.utility.ParamParser;
+import io.vertx.config.ConfigRetrieverOptions;
+import io.vertx.config.ConfigStoreOptions;
 import io.vertx.core.Future;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
+import io.vertx.rxjava.config.ConfigRetriever;
 import io.vertx.rxjava.core.AbstractVerticle;
 import io.vertx.rxjava.core.RxHelper;
 import io.vertx.rxjava.ext.jdbc.JDBCClient;
@@ -16,15 +19,18 @@ import io.vertx.rxjava.ext.web.RoutingContext;
 public class ProductVerticle extends AbstractVerticle {
     private static final Logger log = LoggerFactory.getLogger(ProductVerticle.class);
     private static final Integer PORT = 8080;
-    private static final String SQL_GET_PAGE_OF_PRODUCTS = "SELECT * FROM products limit ?,?";
-    private static final String SQL_INSERT_NEW_PRODUCT = "INSERT INTO products (name) values (?)";
-    private static final String SQL_CHECK_CONNECTION = "select * from products limit 1";
+    private static final String SQL_GET_PAGE_OF_PRODUCTS = "SELECT * FROM products LIMIT ?,?";
+    private static final String SQL_INSERT_NEW_PRODUCT = "INSERT INTO products (name) VALUES (?)";
+    private static final String SQL_CHECK_CONNECTION = "SELECT * FROM products LIMIT 1";
 
     private JDBCClient dbClient;
+    private ConfigRetriever configRetriever;
 
     @Override
     public void start(Future<Void> startFuture) throws Exception {
-        Future<Void> setup = obtainDatabaseConnection().compose(event -> startWebServer());
+        Future<Void> setup = initConfigRetriever()
+                .compose(event -> obtainDatabaseConnection())
+                .compose(event -> startWebServer());
         setup.setHandler(ar -> {
             if (ar.failed()) {
                 startFuture.fail(ar.cause());
@@ -40,6 +46,24 @@ public class ProductVerticle extends AbstractVerticle {
         dbClient.rxClose().subscribe(aVoid -> stopFuture.complete());
     }
 
+    private Future<Void> initConfigRetriever() {
+        return Future.future(event -> {
+            ConfigStoreOptions jsonStore = new ConfigStoreOptions()
+                    .setType("file")
+                    .setFormat("json")
+                    .setConfig(new JsonObject().put("path", "config.json"));
+            ConfigRetrieverOptions options = new ConfigRetrieverOptions().addStore(jsonStore);
+            configRetriever = ConfigRetriever.create(vertx, options);
+            configRetriever.getConfig(event1 -> {
+                if (event1.succeeded()) {
+                    event.complete();
+                } else {
+                    event.fail(event1.cause());
+                }
+            });
+        });
+    }
+
     private Future<Void> startWebServer() {
         Router router = Router.router(vertx);
         router.get("/products").handler(this::returnProducts);
@@ -53,6 +77,28 @@ public class ProductVerticle extends AbstractVerticle {
                             httpServer -> event.complete(),
                             event::fail
                     );
+        });
+    }
+
+    private Future<Void> obtainDatabaseConnection() {
+        return Future.future(event -> {
+            configRetriever.getConfig(configEvent -> {
+                if (configEvent.succeeded()) {
+                    JsonObject jdbc = configEvent.result().getJsonObject("jdbc");
+                    dbClient = JDBCClient.createShared(vertx, new JsonObject()
+                            .put("provider_class", jdbc.getString("provider_class"))
+                            .put("jdbcUrl", jdbc.getString("jdbcUrl"))
+                            .put("username", jdbc.getString("username"))
+                            .put("password", jdbc.getString("password"))
+                            .put("connectionTimeout", jdbc.getInteger("connectionTimeout"))
+                            .put("maximumPoolSize", jdbc.getInteger("maximumPoolSize")));
+                    dbClient.rxGetConnection()
+                            .flatMap(conn -> conn.rxQuery(SQL_CHECK_CONNECTION).doAfterTerminate(conn::close))
+                            .subscribe(resultSet -> event.complete(), event::fail);
+                } else {
+                    event.fail(configEvent.cause());
+                }
+            });
         });
     }
 
@@ -86,22 +132,6 @@ public class ProductVerticle extends AbstractVerticle {
                                 .doAfterTerminate(conn::close);
                     })
                     .subscribe(r -> rc.response().setStatusCode(201).end());
-        });
-    }
-
-    private Future<Void> obtainDatabaseConnection() {
-        return Future.future(event -> {
-            dbClient = JDBCClient.createShared(vertx, new JsonObject()
-                    .put("provider_class", "io.vertx.ext.jdbc.spi.impl.HikariCPDataSourceProvider")
-                    .put("jdbcUrl", "jdbc:mysql://localhost:3306/shopx?useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&useSSL=false")
-                    .put("username", "root")
-                    .put("password", "root")
-                    .put("connectionTimeout", 1000)
-                    .put("maximumPoolSize", 64));
-
-            dbClient.rxGetConnection()
-                    .flatMap(conn -> conn.rxQuery(SQL_CHECK_CONNECTION).doAfterTerminate(conn::close))
-                    .subscribe(resultSet -> event.complete(), event::fail);
         });
     }
 }

@@ -11,3 +11,5 @@ build
 temp*
 dist
 test-output
+
+.vertx
