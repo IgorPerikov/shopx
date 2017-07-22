@@ -9,7 +9,7 @@
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>recommendation-service</artifactId>
+    <artifactId>reviews-service</artifactId>
 
     <properties>
         <vertx.verticle></vertx.verticle>

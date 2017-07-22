@@ -1,4 +1,4 @@
-package com.github.igorperikov.shopx.product;
+package com.github.igorperikov.shopx.common.utility;
 
 import io.vertx.core.json.JsonObject;
 import io.vertx.rxjava.ext.web.RoutingContext;

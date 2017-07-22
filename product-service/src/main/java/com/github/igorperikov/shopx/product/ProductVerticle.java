@@ -1,5 +1,7 @@
 package com.github.igorperikov.shopx.product;
 
+import com.github.igorperikov.shopx.common.entities.Product;
+import com.github.igorperikov.shopx.common.utility.ParamParser;
 import io.vertx.core.Future;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -11,12 +13,12 @@ import io.vertx.rxjava.ext.jdbc.JDBCClient;
 import io.vertx.rxjava.ext.web.Router;
 import io.vertx.rxjava.ext.web.RoutingContext;
 
-
 public class ProductVerticle extends AbstractVerticle {
     private static final Logger log = LoggerFactory.getLogger(ProductVerticle.class);
     private static final Integer PORT = 8080;
     private static final String SQL_GET_PAGE_OF_PRODUCTS = "SELECT * FROM products limit ?,?";
     private static final String SQL_INSERT_NEW_PRODUCT = "INSERT INTO products (name) values (?)";
+    private static final String SQL_CHECK_CONNECTION = "select * from products limit 1";
 
     private JDBCClient dbClient;
 
@@ -98,7 +100,7 @@ public class ProductVerticle extends AbstractVerticle {
                     .put("maximumPoolSize", 64));
 
             dbClient.rxGetConnection()
-                    .flatMap(conn -> conn.rxQuery("select * from products limit 1").doAfterTerminate(conn::close))
+                    .flatMap(conn -> conn.rxQuery(SQL_CHECK_CONNECTION).doAfterTerminate(conn::close))
                     .subscribe(resultSet -> event.complete(), event::fail);
         });
     }
